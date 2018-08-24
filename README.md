@@ -3,11 +3,11 @@
 ---
 
 ### Use case:
-*Display one or more progressbars at the same time*
+*Display one or more progressbars in the console at the same time*
 
 ## Composer Install
 
-Add the fallowing to your `composer.json`
+Add the following to your `composer.json`
 ```
 {
     "require": {
@@ -19,7 +19,7 @@ Add the fallowing to your `composer.json`
 ### 5.1 Notes
 **This has only been tested on Laravel 5.1 but probably works with other versions**
 
-It allows up to 3 rows of progressbars and a group messagebar running as a group in parallel.
+It allows up to 3 rows of progressbars and a messagebar to be run as a group.
 
 **Example**
 ```
@@ -29,7 +29,7 @@ $yMax = ($totalBars > 1) ? 4 : 0;
 $zMax = ($totalBars > 2) ? 10 : 0;
 $totalYs=0;
 $totalZs=0;
-$this->progressBar = new MultilineProgressBar($this->output, 'Processing Events', '|', $xMax, $yMax, $zMax);
+$this->progressBar = new MultilineProgressbar($this->output, 'Processing Events', '|', $xMax, $yMax, $zMax);
 if($this->option('debug')) {
     $this->progressBar->debug();
 }
@@ -72,4 +72,4 @@ Working with atomic unit 120 : 120/120 [============================] 100%
 ```
 **Special Thanks**
 
-This project was sponsored by [Let's Go Learn](http://letsgolearn.com/)
+This project was made possible by [Let's Go Learn](http://letsgolearn.com/)
