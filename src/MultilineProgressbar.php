@@ -11,73 +11,260 @@ use Symfony\Component\Console\Output\OutputInterface;
 class MultilineProgressbar
 {
     /**
+     * note: Each of the lines are held on their own here.
+     *
      * @var ProgressBar
      */
-    public $progressBar,$progressBar2,$progressBar3,$messageBar;
+    protected $progressBar, $progressBar2, $progressBar3, $messageBar;
 
     /**
+     * note: These hold the total we are expecting for each progressbar. Message bar uses the sum total of the 3 maxs.
+     *
      * @var int|null
      */
-    public $max, $max2, $max3, $percentInc, $percentInc2, $percentInc3;
+    protected $max, $max2, $max3;
 
     /**
+     * note: These tell us how often add to each progressbars.
+     *
+     * @var int
+     */
+    protected $percentInc, $percentInc2, $percentInc3;
+
+    /**
+     * note: How many lines are we working with.
+     *
+     * @var int
+     */
+    protected $totalLines;
+
+    /**
+     * note: Which item we are on for each progressbar.
+     *
      * @var int|null
      */
-    protected $multiProgressLines, $progressValue, $progressValue2, $progressValue3;
+    protected $progressValue, $progressValue2, $progressValue3;
 
     /**
+     * note: The message we display on line. $message and $secondary are on the same line by default.
+     *
      * @var string
      */
-    public $message, $secondary, $progress, $progress2, $progress3;
+    protected $message, $secondary, $progress, $progress2, $progress3;
 
     /**
+     * note: The formating for the top line.  This is the
+     *
      * @var string
      */
-    public $messageFormat = '%message% -> %secondary% : %elapsed:6s%/%estimated:-6s% %memory:6s%';
+    protected $messageFormat = '%message% -> %secondary% : %elapsed:6s%/%estimated:-6s% %memory:6s%';
 
     /**
+     * note: All the progressbars share the same formatign and it's set here.
+     *
      * @var string
      */
-    public $barFormat = '%message% : %current%/%max% [%bar%] %percent:3s%% ';
+    protected $barFormat = '%message% : %current%/%max% [%bar%] %percent:3s%% ';
 
     /**
+     * If false we use \ | / and -.  If true we stop using - as it can cause the message line to wobble.
+     *
      * @var bool
      */
-    public $removeWobble = false;
+    protected $removeWobble = false;
 
     /**
+     * note: We display back into the output object which is passed to us.
+     *
      * @var OutputInterface
      */
     public $output;
 
+
     /**
      * EnhancedProgressBar constructor.
      *
-     * note: this lets us have progress bars with up to 3 lines of progress.
+     * note: This lets us have progress bars with up to 3 lines of progress.
      *
      * @param OutputInterface $output
-     * @param string $message
-     * @param string $secondary
-     * @param int       $max
-     * @param int|null  $max2
-     * @param int|null  $max3
-     * @param int       $percentInc
-     * @param int       $percentInc2
-     * @param int       $percentInc3
+     * @param string|array    $messages
+     * @param string          $secondary
+     * @param int             $max
+     * @param int|null        $max2
+     * @param int|null        $max3
+     * @param int|null        $percentInc
+     * @param int|null        $percentInc2
+     * @param int|null        $percentInc3
      */
-    public function __construct($output, $message, $secondary, $max = 0, $max2 = null, $max3 = null, $percentInc = 2, $percentInc2 = 2, $percentInc3 = 2) {
-        $this->output       = $output;
-        $this->message      = $message;
-        $this->secondary    = $secondary;
-        $this->max          = $max;
-        $this->max2         = $this->max * $max2;
-        $this->max3         = $this->max2 * $max3;
-        $this->percentInc   = $percentInc;
-        $this->percentInc2  = $percentInc2;
-        $this->percentInc3  = $percentInc3;
-        $this->multiProgressLines = $this->getLineCount();
+    public function __construct(
+        $output,
+        $messages,
+        $secondary,
+        $max = 0,
+        $max2 = 0,
+        $max3 = 0,
+        $percentInc = 2,
+        $percentInc2 = 2,
+        $percentInc3 = 2
+    ) {
+        $this->output      = $output;
+        $messages = (! is_array($messages)) ? ['message' => $messages] : $messages;
+        foreach($messages as $type => $message)
+        {
+            $this->$type = $message;
+        }
+        $this->secondary   = $secondary;
+        $this->max         = $max;
+        $this->max2        = $this->max * $max2;
+        $this->max3        = $this->max2 * $max3;
+        $this->percentInc  = $percentInc;
+        $this->percentInc2 = $percentInc2;
+        $this->percentInc3 = $percentInc3;
+        $this->totalLines  = $this->totalLineCount();
     }
 
+
+    /**
+     * note: Builds the progress bar(s) and the message bar.
+     *
+     * @param $type
+     * @param $messages
+     * @param $max
+     * @param $percentInc
+     */
+    protected function buildProgressBar($type, $messages, $max, $percentInc)
+    {
+        if ( ! is_array($messages)) {
+            $messages = ['message' => $messages];
+        }
+        $typeBar        = $this->barType($type);
+        $this->$typeBar = new ProgressBar($this->output, $max);
+        $this->$typeBar->setFormatDefinition('message', $this->messageFormat);
+        $this->$typeBar->setFormatDefinition('bar', $this->barFormat);
+        switch ($type) {
+            case 'message':
+                $this->$typeBar->setFormat('message');
+                break;
+            default :
+                $this->$typeBar->setFormat('bar');
+        }
+
+        $percentNumber = $percentInc / 100;
+        $redrawFreq    = ($max < 100 || $percentInc === 0) ? 1 : ceil($max * $percentNumber);
+        $this->$typeBar->setRedrawFrequency($redrawFreq);
+
+        foreach ($messages as $key => $value) {
+            $this->setMessage($value, $key);
+        }
+
+        $this->$typeBar->start();
+    }
+
+
+    /**
+     * note: Deals with moving the cursor up.
+     *
+     * @param $type
+     */
+    protected function lineUpCursor($type)
+    {
+        $lines      = $this->lineCount($type);
+        $totalLines = $this->totalLines - $lines;
+        for ($i = 0; $i < $totalLines; $i++) {
+            print "\033[1A";
+        }
+    }
+
+
+    /**
+     * note: Deals with moving the cursor down.
+     *
+     * @param $type
+     */
+    protected function lineDownCursor($type)
+    {
+        $lines      = $this->lineCount($type);
+        $totalLines = $this->totalLines - $lines;
+        for ($i = 0; $i < $totalLines; $i++) {
+            print PHP_EOL;
+        }
+    }
+
+
+    /**
+     * note: Lets us know how many lines we will be moving thru.
+     *
+     * @param $type
+     *
+     * @return int
+     */
+    protected function lineCount($type)
+    {
+        $line = 0;
+        switch ($type) {
+            case 'progress' :
+                $line = 1;
+                break;
+            case 'progress2' :
+                $line = 2;
+                break;
+            case 'progress3' :
+                $line = 3;
+                break;
+        }
+
+        return $line;
+    }
+
+
+    /**
+     * note: align bars to the string we use to talk about them.
+     * @param $type
+     *
+     * @return string
+     */
+    protected function barType($type)
+    {
+        switch ($type) {
+            case 'progress' :
+                $barType = 'progressBar';
+                break;
+            case 'progress2' :
+                $barType = 'progressBar2';
+                break;
+            case 'progress3' :
+                $barType = 'progressBar3';
+                break;
+            default :
+                $barType = 'messageBar';
+        }
+
+        return $barType;
+    }
+
+    /**
+     * note: How many lines are we going to be working thru.
+     * @return int
+     */
+    protected function totalLineCount()
+    {
+        $count = 1;
+        foreach (['max', 'max2', 'max3'] as $check) {
+            if ( ! empty($this->$check)) {
+                $count++;
+            }
+        }
+
+        return $count;
+    }
+
+
+    /**
+     * note: If this is used we always update with each atomic change.  Normally we update when the percent ticks for a
+     * line.
+     *
+     * @return $this
+     */
     public function debug()
     {
         $this->percentInc  = 0;
@@ -87,35 +274,47 @@ class MultilineProgressbar
         return $this;
     }
 
+
+    /**
+     * note: If this is used we remove the - character on the spinner.
+     */
     public function removeSpinWobble()
     {
         $this->removeWobble = true;
     }
 
+
+    /**
+     * note: This starts the displaying of the progress bar(s).
+     */
     public function start()
     {
         $thisMessage   = (empty($this->message)) ? 'message' : $this->message;
         $thisMessage2  = (empty($this->secondary)) ? 'secondary' : $this->secondary;
         $messagesCount = max([$this->max, $this->max2, $this->max3]);
-        $this->buildProgressBar('message', ['message' => $thisMessage, 'secondary' => $thisMessage2], $messagesCount, 0);
+        $this->buildProgressBar('message', ['message' => $thisMessage, 'secondary' => $thisMessage2], $messagesCount,
+            0);
         print PHP_EOL;
         $thisMessage = (empty($this->progress)) ? 'progress' : $this->progress;
         $this->buildProgressBar('progress', ['progress' => $thisMessage], $this->max, $this->percentInc);
         print PHP_EOL;
 
-        if (! empty($this->max2)) {
+        if ( ! empty($this->max2)) {
             $thisMessage = (empty($this->progress2)) ? 'progress2' : $this->progress2;
             $this->buildProgressBar('progress2', ['progress2' => $thisMessage], $this->max2, $this->percentInc2);
             print PHP_EOL;
         }
-        if (! empty($this->max3)) {
+        if ( ! empty($this->max3)) {
             $thisMessage = (empty($this->progress3)) ? 'progress3' : $this->progress3;
             $this->buildProgressBar('progress3', ['progress3' => $thisMessage], $this->max3, $this->percentInc3);
             print PHP_EOL;
         }
     }
 
+
     /**
+     * note: use this when the only lines you want to display are the messagebar lines.
+     *
      * @param string $message
      * @param string $secondary
      */
@@ -127,70 +326,11 @@ class MultilineProgressbar
         $this->buildProgressBar('message', ['message' => $message, 'secondary' => $secondary], 1, 0);
     }
 
-    public function getCurrentValues()
-    {
-        if (! empty($this->progressBar)) {
-            $this->progressValue = $this->progressBar->getProgress() - 1;
-        }
-        if (! empty($this->progressBar2)) {
-            $this->progressValue2 = $this->progressBar2->getProgress() - 1;
-        }
-        if (! empty($this->progressBar3)) {
-            $this->progressValue3 = $this->progressBar3->getProgress() - 1;
-        }
-    }
-
-    public function jumpProgress()
-    {
-        if (! empty($this->progressBar)) {
-            $this->progressBar->setProgress($this->progressValue);
-            $this->advance('progress');
-        }
-        if (! empty($this->progressBar2)) {
-            $this->progressBar2->setProgress($this->progressValue2);
-            $this->advance('progress2');
-        }
-        if (! empty($this->progressBar3)) {
-            $this->progressBar3->setProgress($this->progressValue3);
-            $this->advance('progress3');
-        }
-    }
 
     /**
-     * @param $type
-     * @param $messages
-     * @param $max
-     * @param $percentInc
-     */
-    public function buildProgressBar($type, $messages, $max, $percentInc)
-    {
-        if (! is_array($messages)) {
-            $messages = ['message' => $messages];
-        }
-        $typeBar        = $this->barType($type);
-        $this->$typeBar = new ProgressBar($this->output, $max);
-        $this->$typeBar->setFormatDefinition('lglMessage', $this->messageFormat);
-        $this->$typeBar->setFormatDefinition('lglBar', $this->barFormat);
-        switch ($type) {
-            case 'message':
-                $this->$typeBar->setFormat('lglMessage');
-                break;
-            default :
-                $this->$typeBar->setFormat('lglBar');
-        }
-
-        $percentNumber = $percentInc / 100;
-        $redrawFreq =  ($max < 100 || $percentInc === 0) ? 1 : ceil($max * $percentNumber);
-        $this->$typeBar->setRedrawFrequency($redrawFreq);
-
-        foreach ($messages as $key => $value) {
-            $this->setMessage($value, $key);
-        }
-
-        $this->$typeBar->start();
-    }
-
-    /**
+     * note: Moves the cursor around based on the bar we are attempting to manipulate and runs the advance for the
+     * progressbar(s) we are working on.
+     *
      * @param $types
      */
     public function advance($types)
@@ -205,7 +345,10 @@ class MultilineProgressbar
         }
     }
 
+
     /**
+     * note: Use when we are done.
+     *
      * @return string
      */
     public function finish()
@@ -215,17 +358,17 @@ class MultilineProgressbar
         print PHP_EOL;
         $return = 'message';
 
-        if (! empty($this->progressBar)) {
+        if ( ! empty($this->progressBar)) {
             $this->progressBar->finish();
             print PHP_EOL;
             $return = 'progress';
         }
-        if (! empty($this->progressBar2)) {
+        if ( ! empty($this->progressBar2)) {
             $this->progressBar2->finish();
             print PHP_EOL;
             $return = 'progress2';
         }
-        if (! empty($this->progressBar3)) {
+        if ( ! empty($this->progressBar3)) {
             $this->progressBar3->finish();
             print PHP_EOL;
             $return = 'progress3';
@@ -236,71 +379,10 @@ class MultilineProgressbar
         return $return;
     }
 
-    /**
-     * @param $type
-     */
-    public function lineUpCursor($type)
-    {
-        $lines      = $this->lineCount($type);
-        $totalLines = $this->multiProgressLines - $lines;
-        for ($i = 0;$i < $totalLines;$i++) {
-            print "\033[1A";
-        }
-    }
 
     /**
-     * @param $type
-     */
-    public function lineDownCursor($type)
-    {
-        $lines      = $this->lineCount($type);
-        $totalLines = $this->multiProgressLines - $lines;
-        for ($i = 0;$i < $totalLines;$i++) {
-            print PHP_EOL;
-        }
-    }
-
-    /**
-     * @return int
-     */
-    public function getLineCount()
-    {
-        $count = 1;
-        foreach (['max', 'max2', 'max3'] as $check) {
-            if (! empty($this->$check)) {
-                $count++;
-            }
-        }
-
-        return $count;
-    }
-
-    /**
-     * @param $type
+     * note: Lets us update the various user supplied strings.
      *
-     * @return int
-     */
-    public function lineCount($type)
-    {
-        switch ($type) {
-            case 'message' :
-            case 'secondary' :
-                $line = 0;
-                break;
-            case 'progress' :
-                $line = 1;
-                break;
-            case 'progress2' :
-                $line = 2;
-                break;
-            default :
-                $line = 3;
-        }
-
-        return $line;
-    }
-
-    /**
      * @param      $message
      * @param null $type
      */
@@ -310,20 +392,24 @@ class MultilineProgressbar
             $this->message = $message;
             $this->messageBar->setMessage($message);
         } else {
-            $barType = $this->barType($type);
+            $barType     = $this->barType($type);
             $this->$type = $message;
 
             switch ($type) {
-            case 'secondary' :
-                $this->$barType->setMessage($message, $type);
-                break;
-            default :
-                $this->$barType->setMessage($message);
+                case 'secondary' :
+                    $this->$barType->setMessage($message, $type);
+                    break;
+                default :
+                    $this->$barType->setMessage($message);
             }
         }
     }
 
+
     /**
+     * note: Deals with updating the spinner string. If the spinner was on a different line we also correct for that
+     * here.
+     *
      * @param string $type
      */
     public function spin($type = 'secondary')
@@ -344,8 +430,7 @@ class MultilineProgressbar
             default :
                 $spin = $this->message;
         }
-        if($this->removeWobble)
-        {
+        if ($this->removeWobble) {
             switch ($spin) {
                 case '/':
                     $message = '\\';
@@ -356,8 +441,7 @@ class MultilineProgressbar
                 default :
                     $message = '/';
             }
-        }
-        else {
+        } else {
             switch ($spin) {
                 case '/':
                     $message = '-';
@@ -377,6 +461,26 @@ class MultilineProgressbar
 
 
     /**
+     * @return string
+     */
+    public function getMessage(): string
+    {
+        return $this->message;
+    }
+
+
+    /**
+     * @return string
+     */
+    public function getSecondary(): string
+    {
+        return $this->secondary;
+    }
+
+
+    /**
+     * note: shorthand for spin and advance.
+     *
      * @param string $type
      */
     public function spinAdvance($type = 'secondary')
@@ -385,39 +489,81 @@ class MultilineProgressbar
         $this->advance($type);
     }
 
+
     /**
+     * note: shorthand for setMessage, spin and advance.
+     *
      * @param $message
      * @param $type
      */
     public function setMessageAndSpinAndAdvance($message, $type)
     {
-        $types = [$type,'secondary'];
+        $types = [$type, 'secondary'];
         $this->setMessage($message, $type);
         $this->spin();
         $this->advance($types);
     }
 
-    /**
-     * @param $type
-     *
-     * @return string
-     */
-    public function barType($type)
-    {
-        switch ($type) {
-            case 'progress' :
-                $barType = 'progressBar';
-                break;
-            case 'progress2' :
-                $barType = 'progressBar2';
-                break;
-            case 'progress3' :
-                $barType = 'progressBar3';
-                break;
-            default :
-                $barType = 'messageBar';
-        }
 
-        return $barType;
+    /**
+     * @return int|null
+     */
+    public function getMax(): int
+    {
+        return $this->max;
+    }
+
+
+    /**
+     * @return int
+     */
+    public function getTotalLines(): int
+    {
+        return $this->totalLines;
+    }
+
+
+    /**
+     * @return int|null
+     */
+    public function getMax2(): int
+    {
+        return $this->max2;
+    }
+
+
+    /**
+     * @return int|null
+     */
+    public function getMax3(): int
+    {
+        return $this->max3;
+    }
+
+
+    /**
+     * @return int|null
+     */
+    public function getPercentInc(): int
+    {
+        return $this->percentInc;
+    }
+
+
+    /**
+     * @return int|null
+     */
+    public function getPercentInc2(): int
+    {
+        return $this->percentInc2;
+    }
+
+
+    /**
+     * @return int|null
+     */
+    public function getPercentInc3(): int
+    {
+        return $this->percentInc3;
     }
 }
