@@ -566,4 +566,40 @@ class MultilineProgressbar
     {
         return $this->percentInc3;
     }
+
+
+    /**
+     * @return string
+     */
+    public function getBarFormat(): string
+    {
+        return $this->barFormat;
+    }
+
+
+    /**
+     * @return string
+     */
+    public function getMessageFormat(): string
+    {
+        return $this->messageFormat;
+    }
+
+
+    /**
+     * string $format
+     */
+    public function setBarFormat($format)
+    {
+        $this->barFormat = $format;
+    }
+
+
+    /**
+     * string $format
+     */
+    public function setMessageFormat($format)
+    {
+        $this->messageFormat = $format;
+    }
 }
