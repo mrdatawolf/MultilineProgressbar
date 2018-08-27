@@ -1,11 +1,15 @@
 {
     "name": "mrdatawolf/multiline-progressbar",
     "description": "Creates a group of commandline progressbars to interact with.",
-    "keywords": ["laravel"],
+    "keywords": ["symfony","helper","output","console","progress"],
+    "license": "MIT",
     "autoload": {
         "psr-4": {
             "Mrdatawolf\\MultilineProgressbar\\": "src/"
         }
+    },
+    "require": {
+        "php":"^7.0"
     },
     "require-dev": {
         "phpunit/phpunit": "^6.3"
